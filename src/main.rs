@@ -11,6 +11,7 @@ struct Individual {
     y: f32,
     vx: f32,
     vy: f32,
+    health: i32,
 }
 
 impl Individual {
@@ -22,6 +23,7 @@ impl Individual {
             y,
             vx: angle.cos() * speed,
             vy: angle.sin() * speed,
+            health: 4,
         }
     }
 
@@ -57,10 +59,19 @@ struct Shot {
     vx: f32,
     vy: f32,
     active: bool,
+    target_swarm: usize,
+    target_individual: usize,
 }
 
 impl Shot {
-    fn new(from_x: f32, from_y: f32, to_x: f32, to_y: f32) -> Self {
+    fn new(
+        from_x: f32,
+        from_y: f32,
+        to_x: f32,
+        to_y: f32,
+        target_swarm: usize,
+        target_individual: usize,
+    ) -> Self {
         let dx = to_x - from_x;
         let dy = to_y - from_y;
         let dist = (dx * dx + dy * dy).sqrt();
@@ -74,10 +85,12 @@ impl Shot {
             vx: dx / dist * speed,
             vy: dy / dist * speed,
             active: true,
+            target_swarm,
+            target_individual,
         }
     }
 
-    fn update(&mut self) {
+    fn update(&mut self) -> bool {
         self.x += self.vx;
         self.y += self.vy;
 
@@ -87,7 +100,9 @@ impl Shot {
 
         if dist < 1.0 {
             self.active = false;
+            return true;
         }
+        false
     }
 
     fn draw(&self, center_x: f32, center_y: f32) {
@@ -138,7 +153,7 @@ impl Swarm {
         const MAX_FORCE: f32 = 0.02;
         const SEPARATION_WEIGHT: f32 = 0.8;
         const ALIGNMENT_WEIGHT: f32 = 0.3;
-        const COHESION_WEIGHT: f32 = 0.15;
+        const COHESION_WEIGHT: f32 = 0.08;
 
         let count = self.individuals.len();
         let mut new_velocities = vec![(0.0, 0.0); count];
@@ -430,15 +445,15 @@ async fn main() {
 
         for i in 0..swarms.len() {
             for j in (i + 1)..swarms.len() {
-                for shooter in &swarms[i].individuals {
-                    for target in &swarms[j].individuals {
+                for shooter in swarms[i].individuals.iter() {
+                    for (target_idx, target) in swarms[j].individuals.iter().enumerate() {
                         let dx = target.x - shooter.x;
                         let dy = target.y - shooter.y;
                         let dist = (dx * dx + dy * dy).sqrt();
 
                         if dist < COMBAT_RANGE {
                             if rand::gen_range(0, SHOT_COOLDOWN) == 0 {
-                                shots.push(Shot::new(shooter.x, shooter.y, target.x, target.y));
+                                shots.push(Shot::new(shooter.x, shooter.y, target.x, target.y, j, target_idx));
                             }
                         }
                     }
@@ -448,7 +463,17 @@ async fn main() {
 
         shots.retain(|shot| shot.active);
         for shot in &mut shots {
-            shot.update();
+            if shot.update() {
+                if let Some(target_swarm) = swarms.get_mut(shot.target_swarm) {
+                    if let Some(target_individual) = target_swarm.individuals.get_mut(shot.target_individual) {
+                        target_individual.health -= 1;
+                    }
+                }
+            }
+        }
+
+        for swarm in &mut swarms {
+            swarm.individuals.retain(|ind| ind.health > 0);
         }
 
         for swarm in &swarms {
