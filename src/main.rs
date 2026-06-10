@@ -136,6 +136,9 @@ impl Swarm {
         const SEPARATION_RADIUS: f32 = 2.0;
         const MAX_SPEED: f32 = 0.3;
         const MAX_FORCE: f32 = 0.02;
+        const SEPARATION_WEIGHT: f32 = 0.8;
+        const ALIGNMENT_WEIGHT: f32 = 0.3;
+        const COHESION_WEIGHT: f32 = 0.15;
 
         let count = self.individuals.len();
         let mut new_velocities = vec![(0.0, 0.0); count];
@@ -194,8 +197,8 @@ impl Swarm {
                     sep_x = sep_x / force_mag * force_mag;
                     sep_y = sep_y / force_mag * force_mag;
                 }
-                acc_x += sep_x * 0.8;
-                acc_y += sep_y * 0.8;
+                acc_x += sep_x * SEPARATION_WEIGHT;
+                acc_y += sep_y * SEPARATION_WEIGHT;
             }
 
             if align_count > 0 {
@@ -209,8 +212,8 @@ impl Swarm {
                     align_x = align_x / force_mag * force_mag;
                     align_y = align_y / force_mag * force_mag;
                 }
-                acc_x += align_x * 0.3;
-                acc_y += align_y * 0.3;
+                acc_x += align_x * ALIGNMENT_WEIGHT;
+                acc_y += align_y * ALIGNMENT_WEIGHT;
             }
 
             if coh_count > 0 {
@@ -224,8 +227,8 @@ impl Swarm {
                     coh_x = coh_x / force_mag * force_mag;
                     coh_y = coh_y / force_mag * force_mag;
                 }
-                acc_x += coh_x * 0.15;
-                acc_y += coh_y * 0.15;
+                acc_x += coh_x * COHESION_WEIGHT;
+                acc_y += coh_y * COHESION_WEIGHT;
             }
 
             new_velocities[i] = (acc_x, acc_y);
@@ -371,9 +374,9 @@ async fn main() {
     let sprite_scale = 0.15;
 
     let mut swarms = vec![
-        Swarm::new(100, 25.0, 25.0, Color { r: 1.0, g: 0.3, b: 0.3, a: 1.0 }),
-        Swarm::new(100, 75.0, 25.0, Color { r: 0.3, g: 1.0, b: 0.3, a: 1.0 }),
-        Swarm::new(100, 50.0, 75.0, Color { r: 0.3, g: 0.3, b: 1.0, a: 1.0 }),
+        Swarm::new(200, 25.0, 25.0, Color { r: 1.0, g: 0.3, b: 0.3, a: 1.0 }),
+        Swarm::new(200, 75.0, 25.0, Color { r: 0.3, g: 1.0, b: 0.3, a: 1.0 }),
+        Swarm::new(200, 50.0, 75.0, Color { r: 0.3, g: 0.3, b: 1.0, a: 1.0 }),
     ];
 
     let mut shots: Vec<Shot> = Vec::new();
