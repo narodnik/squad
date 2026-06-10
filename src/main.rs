@@ -17,8 +17,8 @@ struct AudioData {
     treble: f32,
     /// Overall volume/energy - 0.0 to 1.0
     volume: f32,
-    /// Beat detection - true on beat, false otherwise
-    beat: bool,
+    /// Beat strength - 0.0 (no beat) to 1.0 (strong beat), smoothly interpolated
+    beat_strength: f32,
     /// Time for phase tracking - use get_time() or audio position
     time: f32,
 }
@@ -27,12 +27,15 @@ impl AudioData {
     /// Create mock audio data based on time
     /// Replace this with real audio analysis when ready
     fn from_time(time: f32) -> Self {
+        // Smooth beat strength using sine wave for gentle transitions
+        let beat_strength = ((time * 4.0).sin() * 0.5 + 0.5).max(0.0).min(1.0);
+
         Self {
             bass: ((time * 2.0).sin() * 0.5 + 0.5).max(0.0).min(1.0),
             mid: ((time * 3.0).sin() * 0.5 + 0.5).max(0.0).min(1.0),
             treble: ((time * 4.0).sin() * 0.5 + 0.5).max(0.0).min(1.0),
             volume: ((time * 1.5).sin() * 0.5 + 0.5).max(0.0).min(1.0),
-            beat: (time * 4.0).sin() > 0.5,
+            beat_strength,
             time,
         }
     }
@@ -338,18 +341,18 @@ fn height_at(x: f32, y: f32, audio: &AudioData) -> f32 {
     let scale4 = base_scale4 + audio.volume * 0.05;
 
     // Modulate amplitudes with audio energy - bass affects large waves, treble affects small
-    let amp1 = 3.0 + audio.bass * 1.0;
-    let amp2 = 2.5 + audio.bass * 0.8;
-    let amp3 = 2.0 + audio.mid * 0.6;
-    let amp4 = 1.5 + audio.mid * 0.5;
-    let amp5 = 1.2 + audio.mid * 0.4;
-    let amp6 = 1.8 + audio.treble * 0.5;
+    let amp1 = 3.0 + audio.bass * 0.5;
+    let amp2 = 2.5 + audio.bass * 0.4;
+    let amp3 = 2.0 + audio.mid * 0.3;
+    let amp4 = 1.5 + audio.mid * 0.25;
+    let amp5 = 1.2 + audio.mid * 0.2;
+    let amp6 = 1.8 + audio.treble * 0.25;
 
-    // Extra boost on beats
-    let beat_boost = if audio.beat { 1.5 } else { 1.0 };
+    // Smooth beat influence - continuous 0.0 to 1.0 multiplier
+    let beat_influence = 1.0 + audio.beat_strength * 0.3;
 
-    let h1 = (x * scale1 + t * 0.5).sin() * amp1 * beat_boost;
-    let h2 = (y * scale1 * 0.7 + t * 0.3).cos() * amp2 * beat_boost;
+    let h1 = (x * scale1 + t * 0.5).sin() * amp1 * beat_influence;
+    let h2 = (y * scale1 * 0.7 + t * 0.3).cos() * amp2 * beat_influence;
     let h3 = ((x + y) * scale1 * 0.5 + t * 0.4).sin() * amp3;
 
     let h4 = (x * scale2 + t * 0.6).sin() * amp4;
