@@ -384,7 +384,7 @@ async fn main() {
     rand::srand((macroquad::time::get_time() * 1000000.0) as u64);
 
     let mut offset_x = 0.0;
-    let mut offset_y = 0.0;
+    let mut offset_y = -1000.0;
     let pan_speed = 5.0;
 
     let sentinel_texture: Texture2D = load_texture("sentinel.png").await.unwrap();
@@ -480,6 +480,16 @@ async fn main() {
 
         for swarm in &mut swarms {
             swarm.individuals.retain(|ind| ind.health > 0);
+        }
+
+        let alive_swarms = swarms.iter().filter(|s| !s.individuals.is_empty()).count();
+        if alive_swarms <= 1 {
+            swarms = vec![
+                Swarm::new(200, 25.0, 25.0, Color { r: 1.0, g: 0.3, b: 0.3, a: 1.0 }),
+                Swarm::new(200, 75.0, 25.0, Color { r: 0.3, g: 1.0, b: 0.3, a: 1.0 }),
+                Swarm::new(200, 50.0, 75.0, Color { r: 0.3, g: 0.3, b: 1.0, a: 1.0 }),
+            ];
+            shots.clear();
         }
 
         for swarm in &swarms {
