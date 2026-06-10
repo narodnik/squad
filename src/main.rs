@@ -6,6 +6,38 @@ const GRID_SIZE: i32 = 100;
 const ISO_ANGLE_X: f32 = std::f32::consts::FRAC_PI_6;
 const ISO_ANGLE_Y: f32 = std::f32::consts::FRAC_PI_6;
 
+/// Audio analysis data - replace these values with real audio analysis
+/// when integrating with actual audio input
+struct AudioData {
+    /// Low frequency (bass) energy - 0.0 to 1.0
+    bass: f32,
+    /// Mid frequency energy - 0.0 to 1.0
+    mid: f32,
+    /// High frequency (treble) energy - 0.0 to 1.0
+    treble: f32,
+    /// Overall volume/energy - 0.0 to 1.0
+    volume: f32,
+    /// Beat detection - true on beat, false otherwise
+    beat: bool,
+    /// Time for phase tracking - use get_time() or audio position
+    time: f32,
+}
+
+impl AudioData {
+    /// Create mock audio data based on time
+    /// Replace this with real audio analysis when ready
+    fn from_time(time: f32) -> Self {
+        Self {
+            bass: ((time * 2.0).sin() * 0.5 + 0.5).max(0.0).min(1.0),
+            mid: ((time * 3.0).sin() * 0.5 + 0.5).max(0.0).min(1.0),
+            treble: ((time * 4.0).sin() * 0.5 + 0.5).max(0.0).min(1.0),
+            volume: ((time * 1.5).sin() * 0.5 + 0.5).max(0.0).min(1.0),
+            beat: (time * 4.0).sin() > 0.5,
+            time,
+        }
+    }
+}
+
 struct Individual {
     x: f32,
     y: f32,
@@ -27,8 +59,8 @@ impl Individual {
         }
     }
 
-    fn draw(&self, texture: &Texture2D, center_x: f32, center_y: f32, scale: f32, color: Color) {
-        let h = height_at(self.x, self.y);
+    fn draw(&self, texture: &Texture2D, center_x: f32, center_y: f32, scale: f32, color: Color, audio: &AudioData) {
+        let h = height_at(self.x, self.y, audio);
         let pos = to_isometric(self.x, self.y, h, center_x, center_y);
 
         let sentinel_size = 4.0;
@@ -105,12 +137,12 @@ impl Shot {
         false
     }
 
-    fn draw(&self, center_x: f32, center_y: f32) {
+    fn draw(&self, center_x: f32, center_y: f32, audio: &AudioData) {
         if !self.active {
             return;
         }
 
-        let h = height_at(self.x, self.y);
+        let h = height_at(self.x, self.y, audio);
         let pos = to_isometric(self.x, self.y, h, center_x, center_y);
 
         let size = 20.0;
@@ -284,34 +316,53 @@ impl Swarm {
         }
     }
 
-    fn draw(&self, texture: &Texture2D, center_x: f32, center_y: f32, scale: f32) {
+    fn draw(&self, texture: &Texture2D, center_x: f32, center_y: f32, scale: f32, audio: &AudioData) {
         for individual in &self.individuals {
-            individual.draw(texture, center_x, center_y, scale, self.color);
+            individual.draw(texture, center_x, center_y, scale, self.color, audio);
         }
     }
 }
 
-fn height_at(x: f32, y: f32) -> f32 {
-    let scale1 = 0.08;
-    let scale2 = 0.15;
-    let scale3 = 0.25;
-    let scale4 = 0.40;
+fn height_at(x: f32, y: f32, audio: &AudioData) -> f32 {
+    let base_scale1 = 0.08;
+    let base_scale2 = 0.15;
+    let base_scale3 = 0.25;
+    let base_scale4 = 0.40;
 
-    let h1 = (x * scale1).sin() * 3.0;
-    let h2 = (y * scale1 * 0.7).cos() * 2.5;
-    let h3 = ((x + y) * scale1 * 0.5).sin() * 2.0;
+    let t = audio.time;
 
-    let h4 = (x * scale2).sin() * 1.5;
-    let h5 = (y * scale2).cos() * 1.2;
-    let h6 = ((x - y) * scale2 * 0.6).cos() * 1.8;
+    // Modulate scales with audio frequency bands
+    let scale1 = base_scale1 + audio.bass * 0.02;
+    let scale2 = base_scale2 + audio.mid * 0.03;
+    let scale3 = base_scale3 + audio.treble * 0.04;
+    let scale4 = base_scale4 + audio.volume * 0.05;
 
-    let h7 = (x * scale3 + y * scale3 * 0.4).sin() * 0.8;
-    let h8 = (y * scale3 * 1.2).cos() * 0.6;
-    let h9 = ((x + y) * scale3 * 0.8).sin() * 0.7;
+    // Modulate amplitudes with audio energy - bass affects large waves, treble affects small
+    let amp1 = 3.0 + audio.bass * 1.0;
+    let amp2 = 2.5 + audio.bass * 0.8;
+    let amp3 = 2.0 + audio.mid * 0.6;
+    let amp4 = 1.5 + audio.mid * 0.5;
+    let amp5 = 1.2 + audio.mid * 0.4;
+    let amp6 = 1.8 + audio.treble * 0.5;
 
-    let h10 = (x * scale4).sin() * 0.3;
-    let h11 = (y * scale4).cos() * 0.25;
-    let h12 = ((x - y * 0.5) * scale4).sin() * 0.35;
+    // Extra boost on beats
+    let beat_boost = if audio.beat { 1.5 } else { 1.0 };
+
+    let h1 = (x * scale1 + t * 0.5).sin() * amp1 * beat_boost;
+    let h2 = (y * scale1 * 0.7 + t * 0.3).cos() * amp2 * beat_boost;
+    let h3 = ((x + y) * scale1 * 0.5 + t * 0.4).sin() * amp3;
+
+    let h4 = (x * scale2 + t * 0.6).sin() * amp4;
+    let h5 = (y * scale2 + t * 0.2).cos() * amp5;
+    let h6 = ((x - y) * scale2 * 0.6 + t * 0.35).cos() * amp6;
+
+    let h7 = (x * scale3 + y * scale3 * 0.4 + t * 0.25).sin() * 0.8;
+    let h8 = (y * scale3 * 1.2 + t * 0.4).cos() * 0.6;
+    let h9 = ((x + y) * scale3 * 0.8 + t * 0.3).sin() * 0.7;
+
+    let h10 = (x * scale4 + t * 0.15).sin() * 0.3;
+    let h11 = (y * scale4 + t * 0.2).cos() * 0.25;
+    let h12 = ((x - y * 0.5) * scale4 + t * 0.18).sin() * 0.35;
 
     h1 + h2 + h3 + h4 + h5 + h6 + h7 + h8 + h9 + h10 + h11 + h12
 }
@@ -398,6 +449,8 @@ async fn main() {
 
     let mut shots: Vec<Shot> = Vec::new();
 
+    let mut time: f32 = 0.0;
+
     loop {
         clear_background(BLACK);
 
@@ -417,9 +470,14 @@ async fn main() {
         let center_x = screen_width() / 2.0 + offset_x;
         let center_y = screen_height() / 2.0 + offset_y;
 
+        // Create audio data from current time
+        // TODO: Replace this with real audio analysis when ready:
+        // let audio_data = AudioData::from_audio(&mut audio_source);
+        let audio_data = AudioData::from_time(time);
+
         for y in 0..GRID_SIZE {
             for x in 0..GRID_SIZE {
-                let h = height_at(x as f32, y as f32);
+                let h = height_at(x as f32, y as f32, &audio_data);
 
                 let p1 = to_isometric(x as f32, y as f32, h, center_x, center_y);
                 let p2 = to_isometric((x + 1) as f32, y as f32, h, center_x, center_y);
@@ -490,19 +548,22 @@ async fn main() {
                 Swarm::new(200, 50.0, 75.0, Color { r: 0.3, g: 0.3, b: 1.0, a: 1.0 }),
             ];
             shots.clear();
+            time = 0.0;
         }
 
         for swarm in &swarms {
-            swarm.draw(&sentinel_texture, center_x, center_y, sprite_scale);
+            swarm.draw(&sentinel_texture, center_x, center_y, sprite_scale, &audio_data);
         }
 
         for shot in &shots {
-            shot.draw(center_x, center_y);
+            shot.draw(center_x, center_y, &audio_data);
         }
 
         draw_text("Isometric Landscape", 10.0, 10.0, 20.0, WHITE);
         draw_text(&format!("Offset: ({:.0}, {:.0})", offset_x, offset_y), 10.0, 35.0, 16.0, WHITE);
         draw_text("Arrow keys to pan", 10.0, 55.0, 16.0, GRAY);
+
+        time += 0.016;
 
         next_frame().await
     }
