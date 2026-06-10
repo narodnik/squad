@@ -381,6 +381,8 @@ fn conf() -> Conf {
 
 #[macroquad::main(conf)]
 async fn main() {
+    rand::srand((macroquad::time::get_time() * 1000000.0) as u64);
+
     let mut offset_x = 0.0;
     let mut offset_y = 0.0;
     let pan_speed = 5.0;
@@ -444,7 +446,11 @@ async fn main() {
         const SHOT_COOLDOWN: i32 = 30;
 
         for i in 0..swarms.len() {
-            for j in (i + 1)..swarms.len() {
+            for j in 0..swarms.len() {
+                if i == j {
+                    continue;
+                }
+
                 for shooter in swarms[i].individuals.iter() {
                     for (target_idx, target) in swarms[j].individuals.iter().enumerate() {
                         let dx = target.x - shooter.x;
