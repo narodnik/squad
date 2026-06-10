@@ -49,6 +49,66 @@ impl Individual {
     }
 }
 
+struct Shot {
+    x: f32,
+    y: f32,
+    target_x: f32,
+    target_y: f32,
+    vx: f32,
+    vy: f32,
+    active: bool,
+}
+
+impl Shot {
+    fn new(from_x: f32, from_y: f32, to_x: f32, to_y: f32) -> Self {
+        let dx = to_x - from_x;
+        let dy = to_y - from_y;
+        let dist = (dx * dx + dy * dy).sqrt();
+        let speed = 2.0;
+
+        Self {
+            x: from_x,
+            y: from_y,
+            target_x: to_x,
+            target_y: to_y,
+            vx: dx / dist * speed,
+            vy: dy / dist * speed,
+            active: true,
+        }
+    }
+
+    fn update(&mut self) {
+        self.x += self.vx;
+        self.y += self.vy;
+
+        let dx = self.x - self.target_x;
+        let dy = self.y - self.target_y;
+        let dist = (dx * dx + dy * dy).sqrt();
+
+        if dist < 1.0 {
+            self.active = false;
+        }
+    }
+
+    fn draw(&self, center_x: f32, center_y: f32) {
+        if !self.active {
+            return;
+        }
+
+        let h = height_at(self.x, self.y);
+        let pos = to_isometric(self.x, self.y, h, center_x, center_y);
+
+        let size = 20.0;
+        draw_rectangle(
+            pos.x - size / 2.0,
+            pos.y - size / 2.0,
+            size,
+            size,
+            BLACK,
+        );
+    }
+}
+
 struct Swarm {
     individuals: Vec<Individual>,
     color: Color,
@@ -311,10 +371,12 @@ async fn main() {
     let sprite_scale = 0.15;
 
     let mut swarms = vec![
-        Swarm::new(40, 25.0, 25.0, Color { r: 1.0, g: 0.3, b: 0.3, a: 1.0 }),
-        Swarm::new(40, 75.0, 25.0, Color { r: 0.3, g: 1.0, b: 0.3, a: 1.0 }),
-        Swarm::new(40, 50.0, 75.0, Color { r: 0.3, g: 0.3, b: 1.0, a: 1.0 }),
+        Swarm::new(100, 25.0, 25.0, Color { r: 1.0, g: 0.3, b: 0.3, a: 1.0 }),
+        Swarm::new(100, 75.0, 25.0, Color { r: 0.3, g: 1.0, b: 0.3, a: 1.0 }),
+        Swarm::new(100, 50.0, 75.0, Color { r: 0.3, g: 0.3, b: 1.0, a: 1.0 }),
     ];
+
+    let mut shots: Vec<Shot> = Vec::new();
 
     loop {
         clear_background(BLACK);
@@ -360,8 +422,38 @@ async fn main() {
             swarm.update();
         }
 
+        const COMBAT_RANGE: f32 = 15.0;
+        const SHOT_COOLDOWN: i32 = 30;
+
+        for i in 0..swarms.len() {
+            for j in (i + 1)..swarms.len() {
+                for shooter in &swarms[i].individuals {
+                    for target in &swarms[j].individuals {
+                        let dx = target.x - shooter.x;
+                        let dy = target.y - shooter.y;
+                        let dist = (dx * dx + dy * dy).sqrt();
+
+                        if dist < COMBAT_RANGE {
+                            if rand::gen_range(0, SHOT_COOLDOWN) == 0 {
+                                shots.push(Shot::new(shooter.x, shooter.y, target.x, target.y));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        shots.retain(|shot| shot.active);
+        for shot in &mut shots {
+            shot.update();
+        }
+
         for swarm in &swarms {
             swarm.draw(&sentinel_texture, center_x, center_y, sprite_scale);
+        }
+
+        for shot in &shots {
+            shot.draw(center_x, center_y);
         }
 
         draw_text("Isometric Landscape", 10.0, 10.0, 20.0, WHITE);
