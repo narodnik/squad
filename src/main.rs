@@ -140,7 +140,7 @@ impl Shot {
         false
     }
 
-    fn draw(&self, center_x: f32, center_y: f32, audio: &AudioData) {
+    fn draw(&self, texture: &Texture2D, center_x: f32, center_y: f32, audio: &AudioData) {
         if !self.active {
             return;
         }
@@ -148,15 +148,58 @@ impl Shot {
         let h = height_at(self.x, self.y, audio);
         let pos = to_isometric(self.x, self.y, h, center_x, center_y);
 
-        let size = 20.0;
-        draw_rectangle(
-            pos.x - size / 2.0,
-            pos.y - size / 2.0,
-            size,
-            size,
-            BLACK,
+        let laser_length = 40.0;
+        let laser_width = laser_length / 2.0;
+
+        draw_texture_ex(
+            texture,
+            pos.x - laser_length / 2.0,
+            pos.y - laser_width / 2.0,
+            WHITE,
+            DrawTextureParams {
+                dest_size: Some(vec2(laser_length, laser_width)),
+                ..Default::default()
+            },
         );
     }
+}
+
+fn create_laser_texture() -> Texture2D {
+    let width = 64;
+    let height = 32;
+
+    let mut image = Image::gen_image_color(width, height, Color::from_rgba(0, 0, 0, 0));
+
+    for y in 0..height {
+        for x in 0..width {
+            let center_y = height as f32 / 2.0;
+
+            let dy = y as f32 - center_y;
+
+            let dist_from_center = (dy * dy).sqrt() / (height as f32 / 2.0);
+
+            let mut r = 0u8;
+            let mut g = 0u8;
+            let mut b = 0u8;
+            let mut a = 0u8;
+
+            if dist_from_center < 1.0 {
+                let intensity = (1.0 - dist_from_center).powf(2.0);
+
+                let gradient = (x as f32 / width as f32) * std::f32::consts::PI * 2.0;
+                let wave = (gradient * 4.0).sin() * 0.5 + 0.5;
+
+                r = (255.0 * intensity * (0.5 + 0.5 * wave)) as u8;
+                g = (100.0 * intensity) as u8;
+                b = (255.0 * intensity * (0.8 + 0.2 * wave)) as u8;
+                a = (255.0 * intensity * 0.9) as u8;
+            }
+
+            image.set_pixel(x as u32, y as u32, Color::from_rgba(r, g, b, a));
+        }
+    }
+
+    Texture2D::from_image(&image)
 }
 
 struct Swarm {
@@ -444,6 +487,8 @@ async fn main() {
     let sentinel_texture: Texture2D = load_texture("sentinel.png").await.unwrap();
     let sprite_scale = 0.15;
 
+    let laser_texture = create_laser_texture();
+
     let mut swarms = vec![
         Swarm::new(200, 25.0, 25.0, Color { r: 1.0, g: 0.3, b: 0.3, a: 1.0 }),
         Swarm::new(200, 75.0, 25.0, Color { r: 0.3, g: 1.0, b: 0.3, a: 1.0 }),
@@ -559,7 +604,7 @@ async fn main() {
         }
 
         for shot in &shots {
-            shot.draw(center_x, center_y, &audio_data);
+            shot.draw(&laser_texture, center_x, center_y, &audio_data);
         }
 
         draw_text("Isometric Landscape", 10.0, 10.0, 20.0, WHITE);
