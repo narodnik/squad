@@ -62,9 +62,9 @@ impl Individual {
         }
     }
 
-    fn draw(&self, texture: &Texture2D, center_x: f32, center_y: f32, scale: f32, color: Color, audio: &AudioData) {
+    fn draw(&self, texture: &Texture2D, center_x: f32, center_y: f32, scale: f32, color: Color, audio: &AudioData, zoom: f32) {
         let h = height_at(self.x, self.y, audio);
-        let pos = to_isometric(self.x, self.y, h, center_x, center_y);
+        let pos = to_isometric(self.x, self.y, h, center_x, center_y, zoom);
 
         let sentinel_size = 4.0;
         let draw_x = pos.x - sentinel_size / 2.0;
@@ -140,13 +140,13 @@ impl Shot {
         false
     }
 
-    fn draw(&self, texture: &Texture2D, center_x: f32, center_y: f32, audio: &AudioData) {
+    fn draw(&self, texture: &Texture2D, center_x: f32, center_y: f32, audio: &AudioData, zoom: f32) {
         if !self.active {
             return;
         }
 
         let h = height_at(self.x, self.y, audio);
-        let pos = to_isometric(self.x, self.y, h, center_x, center_y);
+        let pos = to_isometric(self.x, self.y, h, center_x, center_y, zoom);
 
         let laser_length = 40.0;
         let laser_width = laser_length / 2.0;
@@ -362,9 +362,9 @@ impl Swarm {
         }
     }
 
-    fn draw(&self, texture: &Texture2D, center_x: f32, center_y: f32, scale: f32, audio: &AudioData) {
+    fn draw(&self, texture: &Texture2D, center_x: f32, center_y: f32, scale: f32, audio: &AudioData, zoom: f32) {
         for individual in &self.individuals {
-            individual.draw(texture, center_x, center_y, scale, self.color, audio);
+            individual.draw(texture, center_x, center_y, scale, self.color, audio, zoom);
         }
     }
 }
@@ -459,9 +459,10 @@ fn get_color(height: f32) -> Color {
     }
 }
 
-fn to_isometric(x: f32, y: f32, z: f32, center_x: f32, center_y: f32) -> Vec2 {
-    let iso_x = (x - y) * ISO_ANGLE_X.cos() * TILE_SIZE + center_x;
-    let iso_y = (x + y) * ISO_ANGLE_Y.sin() * TILE_SIZE - z * TILE_SIZE + center_y;
+fn to_isometric(x: f32, y: f32, z: f32, center_x: f32, center_y: f32, zoom: f32) -> Vec2 {
+    let scaled_tile_size = TILE_SIZE * zoom;
+    let iso_x = (x - y) * ISO_ANGLE_X.cos() * scaled_tile_size + center_x;
+    let iso_y = (x + y) * ISO_ANGLE_Y.sin() * scaled_tile_size - z * scaled_tile_size + center_y;
     vec2(iso_x, iso_y)
 }
 
@@ -483,6 +484,10 @@ async fn main() {
     let mut offset_x = 0.0;
     let mut offset_y = -1000.0;
     let pan_speed = 5.0;
+    let mut zoom = 1.0;
+    const ZOOM_SPEED: f32 = 0.05;
+    const MIN_ZOOM: f32 = 0.2;
+    const MAX_ZOOM: f32 = 3.0;
 
     let sentinel_texture: Texture2D = load_texture("sentinel.png").await.unwrap();
     let sprite_scale = 0.15;
@@ -515,6 +520,13 @@ async fn main() {
             offset_y -= pan_speed;
         }
 
+        if is_key_down(KeyCode::Equal) {
+            zoom = (zoom + ZOOM_SPEED).min(MAX_ZOOM);
+        }
+        if is_key_down(KeyCode::Minus) {
+            zoom = (zoom - ZOOM_SPEED).max(MIN_ZOOM);
+        }
+
         let center_x = screen_width() / 2.0 + offset_x;
         let center_y = screen_height() / 2.0 + offset_y;
 
@@ -527,10 +539,10 @@ async fn main() {
             for x in 0..GRID_SIZE {
                 let h = height_at(x as f32, y as f32, &audio_data);
 
-                let p1 = to_isometric(x as f32, y as f32, h, center_x, center_y);
-                let p2 = to_isometric((x + 1) as f32, y as f32, h, center_x, center_y);
-                let p3 = to_isometric((x + 1) as f32, (y + 1) as f32, h, center_x, center_y);
-                let p4 = to_isometric(x as f32, (y + 1) as f32, h, center_x, center_y);
+                let p1 = to_isometric(x as f32, y as f32, h, center_x, center_y, zoom);
+                let p2 = to_isometric((x + 1) as f32, y as f32, h, center_x, center_y, zoom);
+                let p3 = to_isometric((x + 1) as f32, (y + 1) as f32, h, center_x, center_y, zoom);
+                let p4 = to_isometric(x as f32, (y + 1) as f32, h, center_x, center_y, zoom);
 
                 let color = get_color(h);
 
@@ -600,16 +612,17 @@ async fn main() {
         }
 
         for swarm in &swarms {
-            swarm.draw(&sentinel_texture, center_x, center_y, sprite_scale, &audio_data);
+            swarm.draw(&sentinel_texture, center_x, center_y, sprite_scale, &audio_data, zoom);
         }
 
         for shot in &shots {
-            shot.draw(&laser_texture, center_x, center_y, &audio_data);
+            shot.draw(&laser_texture, center_x, center_y, &audio_data, zoom);
         }
 
         draw_text("Isometric Landscape", 10.0, 10.0, 20.0, WHITE);
         draw_text(&format!("Offset: ({:.0}, {:.0})", offset_x, offset_y), 10.0, 35.0, 16.0, WHITE);
-        draw_text("Arrow keys to pan", 10.0, 55.0, 16.0, GRAY);
+        draw_text(&format!("Zoom: {:.2}x", zoom), 10.0, 55.0, 16.0, WHITE);
+        draw_text("Arrow keys to pan, +/- to zoom", 10.0, 75.0, 16.0, GRAY);
 
         time += 0.016;
 
