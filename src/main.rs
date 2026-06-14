@@ -1,45 +1,13 @@
 use macroquad::prelude::*;
 use macroquad::texture::DrawTextureParams;
 
+mod audio;
+use audio::{AudioState, AudioData};
+
 const TILE_SIZE: f32 = 20.0;
 const GRID_SIZE: i32 = 100;
 const ISO_ANGLE_X: f32 = std::f32::consts::FRAC_PI_6;
 const ISO_ANGLE_Y: f32 = std::f32::consts::FRAC_PI_6;
-
-/// Audio analysis data - replace these values with real audio analysis
-/// when integrating with actual audio input
-struct AudioData {
-    /// Low frequency (bass) energy - 0.0 to 1.0
-    bass: f32,
-    /// Mid frequency energy - 0.0 to 1.0
-    mid: f32,
-    /// High frequency (treble) energy - 0.0 to 1.0
-    treble: f32,
-    /// Overall volume/energy - 0.0 to 1.0
-    volume: f32,
-    /// Beat strength - 0.0 (no beat) to 1.0 (strong beat), smoothly interpolated
-    beat_strength: f32,
-    /// Time for phase tracking - use get_time() or audio position
-    time: f32,
-}
-
-impl AudioData {
-    /// Create mock audio data based on time
-    /// Replace this with real audio analysis when ready
-    fn from_time(time: f32) -> Self {
-        // Smooth beat strength using sine wave for gentle transitions
-        let beat_strength = ((time * 4.0).sin() * 0.5 + 0.5).max(0.0).min(1.0);
-
-        Self {
-            bass: ((time * 2.0).sin() * 0.5 + 0.5).max(0.0).min(1.0),
-            mid: ((time * 3.0).sin() * 0.5 + 0.5).max(0.0).min(1.0),
-            treble: ((time * 4.0).sin() * 0.5 + 0.5).max(0.0).min(1.0),
-            volume: ((time * 1.5).sin() * 0.5 + 0.5).max(0.0).min(1.0),
-            beat_strength,
-            time,
-        }
-    }
-}
 
 struct Individual {
     x: f32,
@@ -481,6 +449,8 @@ fn conf() -> Conf {
 async fn main() {
     rand::srand((macroquad::time::get_time() * 1000000.0) as u64);
 
+    let audio_state = std::sync::Arc::new(AudioState::new());
+
     let mut offset_x = 0.0;
     let mut offset_y = -1000.0;
     let pan_speed = 5.0;
@@ -530,10 +500,22 @@ async fn main() {
         let center_x = screen_width() / 2.0 + offset_x;
         let center_y = screen_height() / 2.0 + offset_y;
 
-        // Create audio data from current time
-        // TODO: Replace this with real audio analysis when ready:
-        // let audio_data = AudioData::from_audio(&mut audio_source);
-        let audio_data = AudioData::from_time(time);
+        audio_state.update();
+
+        let mut audio_data = audio_state.get_data();
+
+        // Update time continuously when audio is present for smooth animation
+        if audio_data.volume > 0.0 || audio_data.bass > 0.0 {
+            audio_data.time = macroquad::time::get_time() as f32;
+
+            // Sample a few height values to see what's happening
+            let h1 = height_at(50.0, 50.0, &audio_data);
+            let h2 = height_at(25.0, 25.0, &audio_data);
+            let h3 = height_at(75.0, 75.0, &audio_data);
+            println!("[Main] bass={:.3}, mid={:.3}, treble={:.3}, vol={:.3}, beat={:.3} | heights: h1={:.2}, h2={:.2}, h3={:.2}",
+                     audio_data.bass, audio_data.mid, audio_data.treble, audio_data.volume, audio_data.beat_strength,
+                     h1, h2, h3);
+        }
 
         for y in 0..GRID_SIZE {
             for x in 0..GRID_SIZE {
