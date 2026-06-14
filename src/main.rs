@@ -497,6 +497,15 @@ async fn main() {
             zoom = (zoom - ZOOM_SPEED).max(MIN_ZOOM);
         }
 
+        // Adjust smoothing factor
+        const SMOOTH_ADJUST_SPEED: f32 = 0.01;
+        if is_key_down(KeyCode::RightBracket) {
+            audio_state.adjust_smoothing_factor(SMOOTH_ADJUST_SPEED);
+        }
+        if is_key_down(KeyCode::LeftBracket) {
+            audio_state.adjust_smoothing_factor(-SMOOTH_ADJUST_SPEED);
+        }
+
         let center_x = screen_width() / 2.0 + offset_x;
         let center_y = screen_height() / 2.0 + offset_y;
 
@@ -509,12 +518,12 @@ async fn main() {
             audio_data.time = macroquad::time::get_time() as f32;
 
             // Sample a few height values to see what's happening
-            let h1 = height_at(50.0, 50.0, &audio_data);
-            let h2 = height_at(25.0, 25.0, &audio_data);
-            let h3 = height_at(75.0, 75.0, &audio_data);
-            println!("[Main] bass={:.3}, mid={:.3}, treble={:.3}, vol={:.3}, beat={:.3} | heights: h1={:.2}, h2={:.2}, h3={:.2}",
-                     audio_data.bass, audio_data.mid, audio_data.treble, audio_data.volume, audio_data.beat_strength,
-                     h1, h2, h3);
+            //let h1 = height_at(50.0, 50.0, &audio_data);
+            //let h2 = height_at(25.0, 25.0, &audio_data);
+            //let h3 = height_at(75.0, 75.0, &audio_data);
+            //println!("[Main] bass={:.3}, mid={:.3}, treble={:.3}, vol={:.3}, beat={:.3} | heights: h1={:.2}, h2={:.2}, h3={:.2}",
+            //         audio_data.bass, audio_data.mid, audio_data.treble, audio_data.volume, audio_data.beat_strength,
+            //         h1, h2, h3);
         }
 
         for y in 0..GRID_SIZE {
@@ -604,7 +613,8 @@ async fn main() {
         draw_text("Isometric Landscape", 10.0, 10.0, 20.0, WHITE);
         draw_text(&format!("Offset: ({:.0}, {:.0})", offset_x, offset_y), 10.0, 35.0, 16.0, WHITE);
         draw_text(&format!("Zoom: {:.2}x", zoom), 10.0, 55.0, 16.0, WHITE);
-        draw_text("Arrow keys to pan, +/- to zoom", 10.0, 75.0, 16.0, GRAY);
+        draw_text(&format!("Smoothing: {:.2}", audio_state.get_smoothing_factor()), 10.0, 75.0, 16.0, YELLOW);
+        draw_text("Arrow: pan  |  +/-: zoom  |  [/]: adjust smoothing", 10.0, 95.0, 16.0, GRAY);
 
         time += 0.016;
 
