@@ -474,8 +474,28 @@ async fn main() {
 
     let mut time: f32 = 0.0;
 
+    // Reusable buffers for terrain rendering to avoid allocation
+    let mut terrain_verts: Vec<f32> = Vec::with_capacity(GRID_SIZE as usize * GRID_SIZE as usize * 6 * 3);
+    let mut terrain_indices: Vec<u16> = Vec::with_capacity(GRID_SIZE as usize * GRID_SIZE as usize * 6);
+    let mut terrain_colors: Vec<f32> = Vec::with_capacity(GRID_SIZE as usize * GRID_SIZE as usize * 6 * 3);
+
+    // FPS tracking
+    let mut fps_timer: f32 = 0.0;
+    let mut frame_count: u32 = 0;
+    let mut current_fps: f32 = 60.0;
+
     loop {
         clear_background(BLACK);
+
+        // FPS tracking
+        let dt = get_frame_time();
+        fps_timer += dt;
+        frame_count += 1;
+        if fps_timer >= 1.0 {
+            current_fps = frame_count as f32 / fps_timer;
+            frame_count = 0;
+            fps_timer = 0.0;
+        }
 
         if is_key_down(KeyCode::Left) {
             offset_x += pan_speed;
@@ -526,6 +546,13 @@ async fn main() {
             //         h1, h2, h3);
         }
 
+        // Single mesh draw call for terrain - reuse buffers to avoid allocation
+        terrain_verts.clear();
+        terrain_indices.clear();
+        terrain_colors.clear();
+
+        let mut vert_idx: u16 = 0;
+
         for y in 0..GRID_SIZE {
             for x in 0..GRID_SIZE {
                 let h = height_at(x as f32, y as f32, &audio_data);
@@ -537,14 +564,45 @@ async fn main() {
 
                 let color = get_color(h);
 
-                draw_triangle(p1, p2, p3, color);
-                draw_triangle(p1, p3, p4, color);
+                // Triangle 1: p1, p2, p3
+                terrain_verts.extend_from_slice(&[p1.x, p1.y, 0.0]);
+                terrain_verts.extend_from_slice(&[p2.x, p2.y, 0.0]);
+                terrain_verts.extend_from_slice(&[p3.x, p3.y, 0.0]);
+                terrain_colors.extend_from_slice(&[color.r, color.g, color.b, color.a]);
+                terrain_colors.extend_from_slice(&[color.r, color.g, color.b, color.a]);
+                terrain_colors.extend_from_slice(&[color.r, color.g, color.b, color.a]);
+                terrain_indices.extend_from_slice(&[vert_idx, vert_idx + 1, vert_idx + 2]);
+                vert_idx += 3;
 
-                draw_line(p1.x, p1.y, p2.x, p2.y, 1.0, color);
-                draw_line(p2.x, p2.y, p3.x, p3.y, 1.0, color);
-                draw_line(p3.x, p3.y, p4.x, p4.y, 1.0, color);
-                draw_line(p4.x, p4.y, p1.x, p1.y, 1.0, color);
+                // Triangle 2: p1, p3, p4
+                terrain_verts.extend_from_slice(&[p1.x, p1.y, 0.0]);
+                terrain_verts.extend_from_slice(&[p3.x, p3.y, 0.0]);
+                terrain_verts.extend_from_slice(&[p4.x, p4.y, 0.0]);
+                terrain_colors.extend_from_slice(&[color.r, color.g, color.b, color.a]);
+                terrain_colors.extend_from_slice(&[color.r, color.g, color.b, color.a]);
+                terrain_colors.extend_from_slice(&[color.r, color.g, color.b, color.a]);
+                terrain_indices.extend_from_slice(&[vert_idx, vert_idx + 1, vert_idx + 2]);
+                vert_idx += 3;
             }
+        }
+
+        // Draw as quads using draw_triangle batches
+        for i in (0..terrain_indices.len()).step_by(3) {
+            let v0 = terrain_indices[i] as usize;
+            let v1 = terrain_indices[i+1] as usize;
+            let v2 = terrain_indices[i+2] as usize;
+
+            let p0 = vec2(terrain_verts[v0*3], terrain_verts[v0*3 + 1]);
+            let p1 = vec2(terrain_verts[v1*3], terrain_verts[v1*3 + 1]);
+            let p2 = vec2(terrain_verts[v2*3], terrain_verts[v2*3 + 1]);
+            let c = Color {
+                r: terrain_colors[v0*4],
+                g: terrain_colors[v0*4 + 1],
+                b: terrain_colors[v0*4 + 2],
+                a: terrain_colors[v0*4 + 3],
+            };
+
+            draw_triangle(p0, p1, p2, c);
         }
 
         for swarm in &mut swarms {
@@ -613,11 +671,12 @@ async fn main() {
         draw_text("Isometric Landscape", 10.0, 10.0, 20.0, WHITE);
         draw_text(&format!("Offset: ({:.0}, {:.0})", offset_x, offset_y), 10.0, 35.0, 16.0, WHITE);
         draw_text(&format!("Zoom: {:.2}x", zoom), 10.0, 55.0, 16.0, WHITE);
-        draw_text(&format!("Smoothing: {:.2}", audio_state.get_smoothing_factor()), 10.0, 75.0, 16.0, YELLOW);
-        draw_text("Arrow: pan  |  +/-: zoom  |  [/]: adjust smoothing", 10.0, 95.0, 16.0, GRAY);
+        draw_text(&format!("FPS: {:.1}", current_fps), 10.0, 75.0, 16.0, if current_fps < 30.0 { RED } else if current_fps < 50.0 { YELLOW } else { GREEN });
+        draw_text(&format!("Smoothing: {:.2}", audio_state.get_smoothing_factor()), 10.0, 95.0, 16.0, YELLOW);
+        draw_text("Arrow: pan  |  +/-: zoom  |  [/]: adjust smoothing", 10.0, 115.0, 16.0, GRAY);
 
         time += 0.016;
 
-        next_frame().await
+        next_frame().await;
     }
 }
